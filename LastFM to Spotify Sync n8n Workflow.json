@@ -3,66 +3,263 @@
   "nodes": [
     {
       "parameters": {
-        "rule": {
-          "interval": [
-            {
-              "field": "hours",
-              "hoursInterval": 24
-            }
-          ]
-        }
+        "jsCode": "const items = $input.all();\nconst firstItem = items[0].json;\nconst config = firstItem.config;\nconst tracksAdded = items.length;\nconst tracksRemoved = firstItem.tracksRemoved || 0;\n\nconst periodLabels = {\n  '7day': 'past 7 days',\n  '1month': 'past month',\n  '3month': 'past 3 months',\n  '6month': 'past 6 months',\n  '12month': 'past year',\n  'overall': 'all time'\n};\n\nconst periodLabel = periodLabels[config.time_period] || config.time_period;\n\nreturn [{\n  json: {\n    success: true,\n    message: `✅ Updated \"${firstItem.playlistName}\" with ${tracksAdded} tracks from your Last.FM ${periodLabel} top tracks`,\n    playlist: firstItem.playlistName,\n    tracksAdded: tracksAdded,\n    tracksRemoved: tracksRemoved,\n    tracksNotFound: firstItem.notFoundCount || 0,\n    timePeriod: periodLabel,\n    sampleNotFound: firstItem.notFoundTracks || [],\n    updatedAt: new Date().toISOString()\n  }\n}];"
       },
-      "id": "schedule-trigger",
-      "name": "Daily Trigger",
-      "type": "n8n-nodes-base.scheduleTrigger",
-      "typeVersion": 1.2,
-      "position": [0, 0],
-      "notes": "Runs every 24 hours to update the playlist. Adjust interval as needed."
+      "id": "aa55e060-5611-4da1-8ff8-dc872feb29e4",
+      "name": "Generate Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2800,
+        688
+      ],
+      "notes": "Creates a summary of the sync operation"
     },
     {
       "parameters": {
-        "mode": "manual",
-        "duplicateItem": false,
-        "assignments": {
-          "assignments": [
+        "resource": "playlist",
+        "operation": "add",
+        "playlistId": "={{ $('⚙️ Configuration').item.json.spotify_playlist_id }}",
+        "trackUris": "={{ $json.trackUri }}",
+        "additionalFields": {}
+      },
+      "id": "a3d8815a-0693-4f1a-a2af-7e92882874d1",
+      "name": "Add New Tracks",
+      "type": "n8n-nodes-base.spotify",
+      "typeVersion": 1,
+      "position": [
+        -3008,
+        688
+      ],
+      "credentials": {
+        "spotifyOAuth2Api": {
+          "id": "wZODsNbXGfGxrych",
+          "name": "Spotify API"
+        }
+      },
+      "notes": "Adds each new track to playlist"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\n\nconst itemsToAdd = data.newTrackUris.map(uri => ({\n  json: {\n    trackUri: uri,\n    spotify_playlist_id: data.spotify_playlist_id,\n    playlistName: data.playlistName,\n    config: data.config,\n    totalTracks: data.newTrackCount,\n    notFoundCount: data.notFoundCount,\n    notFoundTracks: data.notFoundTracks,\n    tracksRemoved: data.tracksRemoved\n  }\n}));\n\nreturn itemsToAdd;"
+      },
+      "id": "ad5aa72f-0318-4097-95c3-f8b1fa917e8e",
+      "name": "Split Tracks for Adding",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3232,
+        688
+      ],
+      "notes": "Creates one item per track to add"
+    },
+    {
+      "parameters": {
+        "mode": "append",
+        "numberOfInputs": 2
+      },
+      "options": {
+        "waitForAllInputs": false
+      },
+      "id": "d7105652-c25e-46f3-a189-3253aff630cf",
+      "name": "Merge Paths",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        -3456,
+        688
+      ],
+      "notes": "Merges the two paths back together"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $('Prepare Playlist Update').item.json;\n\nreturn [{\n  json: {\n    newTrackUris: data.newTrackUris,\n    newTrackCount: data.newTrackCount,\n    notFoundCount: data.notFoundCount,\n    notFoundTracks: data.notFoundTracks,\n    spotify_playlist_id: data.spotify_playlist_id,\n    playlistName: data.playlistName,\n    config: data.config,\n    tracksRemoved: 0\n  }\n}];"
+      },
+      "id": "929fce0f-712d-4547-b846-565ed6f6da59",
+      "name": "Skip Removal",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4112,
+        800
+      ],
+      "notes": "Passes data through when playlist is empty"
+    },
+    {
+      "parameters": {
+        "jsCode": "const firstItem = $input.first().json;\n\nreturn [{\n  json: {\n    newTrackUris: firstItem.newTrackUris || $('Prepare Playlist Update').item.json.newTrackUris,\n    newTrackCount: firstItem.newTrackCount || $('Prepare Playlist Update').item.json.newTrackCount,\n    notFoundCount: firstItem.notFoundCount || $('Prepare Playlist Update').item.json.notFoundCount,\n    notFoundTracks: firstItem.notFoundTracks || $('Prepare Playlist Update').item.json.notFoundTracks,\n    spotify_playlist_id: firstItem.spotify_playlist_id || $('Prepare Playlist Update').item.json.spotify_playlist_id,\n    playlistName: firstItem.playlistName || $('Prepare Playlist Update').item.json.playlistName,\n    config: firstItem.config || $('Prepare Playlist Update').item.json.config,\n    tracksRemoved: $input.all().length\n  }\n}];"
+      },
+      "id": "2df97167-1e48-4d63-ad81-89486e349e11",
+      "name": "After Removal",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3680,
+        560
+      ],
+      "notes": "Consolidates back to single item"
+    },
+    {
+      "parameters": {
+        "resource": "playlist",
+        "operation": "Remove an item",
+        "playlistId": "={{ $('⚙️ Configuration').item.json.spotify_playlist_id }}",
+        "trackUris": "={{ $json.trackUri }}"
+      },
+      "id": "7d481c70-805f-4b58-9cc1-ff961269b704",
+      "name": "Remove Existing Tracks",
+      "type": "n8n-nodes-base.spotify",
+      "typeVersion": 1,
+      "position": [
+        -3888,
+        560
+      ],
+      "credentials": {
+        "spotifyOAuth2Api": {
+          "id": "wZODsNbXGfGxrych",
+          "name": "Spotify API"
+        }
+      },
+      "notes": "Removes each existing track from playlist"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $('Prepare Playlist Update').item.json;\n\nconst itemsToRemove = data.existingUris.map(uri => ({\n  json: {\n    trackUri: uri,\n    spotify_playlist_id: data.spotify_playlist_id,\n    newTrackUris: data.newTrackUris,\n    newTrackCount: data.newTrackCount,\n    notFoundCount: data.notFoundCount,\n    notFoundTracks: data.notFoundTracks,\n    playlistName: data.playlistName,\n    config: data.config\n  }\n}));\n\nreturn itemsToRemove;"
+      },
+      "id": "0ea0d9da-2c9d-4398-ae2c-dc38f41c489d",
+      "name": "Split Tracks for Removal",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4112,
+        560
+      ],
+      "notes": "Creates one item per track for removal"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
             {
-              "id": "lastfm_username",
-              "name": "lastfm_username",
-              "value": "YOUR_LASTFM_USERNAME",
-              "type": "string"
-            },
-            {
-              "id": "spotify_playlist_id",
-              "name": "spotify_playlist_id",
-              "value": "YOUR_SPOTIFY_PLAYLIST_ID",
-              "type": "string"
-            },
-            {
-              "id": "track_limit",
-              "name": "track_limit",
-              "value": 50,
-              "type": "number"
-            },
-            {
-              "id": "time_period",
-              "name": "time_period",
-              "value": "7day",
-              "type": "string"
+              "id": "check-existing",
+              "leftValue": "={{ $json.existingCount }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
             }
-          ]
+          ],
+          "combinator": "and"
         },
         "options": {}
       },
-      "id": "config",
-      "name": "⚙️ Configuration",
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 3.4,
-      "position": [220, 0],
-      "notes": "EDIT YOUR SETTINGS HERE!\n\n• lastfm_username: Your Last.FM username\n• spotify_playlist_id: Target playlist ID (just the ID, not the full URI)\n• track_limit: Number of tracks (1-100)\n• time_period: 7day | 1month | 3month | 6month | 12month | overall"
+      "id": "e2a46c3c-164f-4696-8326-4adcb3889b8c",
+      "name": "Has Existing Tracks?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -4336,
+        688
+      ],
+      "notes": "Only remove tracks if playlist isn't empty"
     },
     {
       "parameters": {
-        "method": "GET",
+        "jsCode": "// Get the collected URIs data from earlier\nconst uriData = $('Collect Spotify URIs').item.json;\n\n// Get playlist data (tracks are nested in tracks.items)\nconst playlistData = $input.first().json;\nconst trackItems = playlistData.tracks?.items || [];\n\n// Extract URIs of tracks currently in playlist\nconst existingUris = trackItems\n  .map(item => item.track?.uri)\n  .filter(uri => uri);\n\nreturn [{\n  json: {\n    existingUris: existingUris,\n    existingCount: existingUris.length,\n    newTrackUris: uriData.trackUris,\n    newTrackCount: uriData.trackCount,\n    notFoundCount: uriData.notFoundCount,\n    notFoundTracks: uriData.notFoundTracks,\n    spotify_playlist_id: uriData.spotify_playlist_id,\n    playlistName: playlistData.name,\n    config: uriData.config\n  }\n}];"
+      },
+      "id": "b8540db2-cf8b-4189-afae-cfc54905cfa8",
+      "name": "Prepare Playlist Update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4560,
+        688
+      ],
+      "notes": "Extracts existing track URIs from playlist response"
+    },
+    {
+      "parameters": {
+        "resource": "playlist",
+        "operation": "get",
+        "id": "={{ $('⚙️ Configuration').item.json.spotify_playlist_id }}"
+      },
+      "id": "abd37747-b0c2-430d-8922-3e2224dc1eb4",
+      "name": "Get Playlist",
+      "type": "n8n-nodes-base.spotify",
+      "typeVersion": 1,
+      "position": [
+        -4768,
+        688
+      ],
+      "credentials": {
+        "spotifyOAuth2Api": {
+          "id": "wZODsNbXGfGxrych",
+          "name": "Spotify API"
+        }
+      },
+      "notes": "Gets the playlist including its tracks (works around Get Tracks 403 issue)"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get config from the first processed track item\nconst config = $('Process Track Data').first().json.config;\n\n// Collect all valid Spotify track URIs\nconst items = $input.all();\nconst trackUris = [];\nconst notFound = [];\n\nfor (let i = 0; i < items.length; i++) {\n  const item = items[i];\n  const originalTrack = $('Process Track Data').all()[i]?.json;\n  \n  // Check for URI at top level or in tracks.items[0].uri\n  let trackUri = item.json.uri || item.json.id;\n  if (!trackUri && item.json.tracks?.items?.length > 0) {\n    trackUri = item.json.tracks.items[0].uri || item.json.tracks.items[0].id;\n  }\n\n  // Only accept actual track URIs or IDs (ignore albums, etc.)\n  // We also try to normalize IDs to URIs if possible\n  if (trackUri) {\n    const fullUri = trackUri.includes(':') ? trackUri : `spotify:track:${trackUri}`;\n    if (fullUri.includes(':track:')) {\n      trackUris.push(fullUri);\n    } else if (originalTrack) {\n      notFound.push(`${originalTrack.artistName} - ${originalTrack.trackName}`);\n    }\n  } else if (originalTrack) {\n    notFound.push(`${originalTrack.artistName} - ${originalTrack.trackName}`);\n  }\n}\n\nreturn [{\n  json: {\n    trackUris: trackUris,\n    trackCount: trackUris.length,\n    notFoundCount: notFound.length,\n    notFoundTracks: notFound.slice(0, 10),\n    spotify_playlist_id: config.spotify_playlist_id,\n    config: config\n  }\n}];"
+      },
+      "id": "a9efd72f-01ef-4735-b8b4-89f08284e2b2",
+      "name": "Collect Spotify URIs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4992,
+        688
+      ],
+      "notes": "Aggregates all found Spotify track URIs"
+    },
+    {
+      "parameters": {
+        "resource": "track",
+        "operation": "search",
+        "query": "={{ $json.searchQuery }}",
+        "limit": 1,
+        "filters": {}
+      },
+      "alwaysOutputData": true,
+      "id": "89ba9a27-59ee-44f6-9f46-ebc11e7075f9",
+      "name": "Search Track on Spotify",
+      "type": "n8n-nodes-base.spotify",
+      "typeVersion": 1,
+      "position": [
+        -5216,
+        688
+      ],
+      "credentials": {
+        "spotifyOAuth2Api": {
+          "id": "wZODsNbXGfGxrych",
+          "name": "Spotify API"
+        }
+      },
+      "notes": "Searches for each track on Spotify"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get config from earlier node\nconst config = $('⚙️ Configuration').item.json;\n\n// Extract track information from Last.FM response\nconst tracks = $input.first().json.toptracks?.track || [];\n\nif (tracks.length === 0) {\n  throw new Error('No tracks found. Check your Last.FM username and that you have scrobbles in the selected time period.');\n}\n\n// Map tracks to a cleaner format with search queries\nconst processedTracks = tracks.map((track, index) => {\n  // Clean track name: remove \"(Remastered)\" and similar suffixes that often break search\n  const cleanTrackName = track.name.replace(/\\s*[\\(\\[].*?Remaster.*?[\\)\\]]/gi, '').trim();\n  \n  return {\n    position: index + 1,\n    trackName: track.name,\n    artistName: track.artist.name,\n    playCount: parseInt(track.playcount),\n    // Use Artist + Track Name order which is more reliable on Spotify\n    searchQuery: `${track.artist.name} ${cleanTrackName}`,\n    config: config\n  };\n});\n\nreturn processedTracks;"
+      },
+      "id": "568d6964-00c7-4a4f-9778-1636021dd44c",
+      "name": "Process Track Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -5440,
+        688
+      ],
+      "notes": "Extracts and formats track data for Spotify search"
+    },
+    {
+      "parameters": {
         "url": "https://ws.audioscrobbler.com/2.0/",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpQueryAuth",
@@ -93,14 +290,17 @@
         },
         "options": {}
       },
-      "id": "lastfm-get-top-tracks",
+      "id": "af2a1ede-5b7c-411d-9fb5-b7a5076de9ff",
       "name": "Get Last.FM Top Tracks",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [440, 0],
+      "position": [
+        -5648,
+        688
+      ],
       "credentials": {
         "httpQueryAuth": {
-          "id": "LASTFM_CREDENTIAL_ID",
+          "id": "4O9djqhKUKugJq0H",
           "name": "Last.FM API Key"
         }
       },
@@ -108,300 +308,141 @@
     },
     {
       "parameters": {
-        "jsCode": "// Get config from earlier node\nconst config = $('⚙️ Configuration').item.json;\n\n// Extract track information from Last.FM response\nconst tracks = $input.first().json.toptracks?.track || [];\n\nif (tracks.length === 0) {\n  throw new Error('No tracks found. Check your Last.FM username and that you have scrobbles in the selected time period.');\n}\n\n// Map tracks to a cleaner format with search queries\nconst processedTracks = tracks.map((track, index) => ({\n  position: index + 1,\n  trackName: track.name,\n  artistName: track.artist.name,\n  playCount: parseInt(track.playcount),\n  searchQuery: `${track.name} ${track.artist.name}`,\n  config: config\n}));\n\nreturn processedTracks;"
-      },
-      "id": "process-tracks",
-      "name": "Process Track Data",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [660, 0],
-      "notes": "Extracts and formats track data for Spotify search"
-    },
-    {
-      "parameters": {
-        "resource": "track",
-        "operation": "search",
-        "query": "={{ $json.searchQuery }}",
-        "limit": 1
-      },
-      "id": "spotify-search",
-      "name": "Search Track on Spotify",
-      "type": "n8n-nodes-base.spotify",
-      "typeVersion": 1,
-      "position": [880, 0],
-      "credentials": {
-        "spotifyOAuth2Api": {
-          "id": "SPOTIFY_CREDENTIAL_ID",
-          "name": "Spotify OAuth2"
-        }
-      },
-      "notes": "Searches for each track on Spotify"
-    },
-    {
-      "parameters": {
-        "jsCode": "// Get config from the first processed track item\nconst config = $('Process Track Data').first().json.config;\n\n// Collect all valid Spotify track URIs\nconst items = $input.all();\nconst trackUris = [];\nconst notFound = [];\n\nfor (let i = 0; i < items.length; i++) {\n  const item = items[i];\n  const tracks = item.json.tracks?.items || [];\n  const originalTrack = $('Process Track Data').all()[i]?.json;\n  \n  if (tracks.length > 0) {\n    trackUris.push(tracks[0].uri);\n  } else if (originalTrack) {\n    notFound.push(`${originalTrack.artistName} - ${originalTrack.trackName}`);\n  }\n}\n\nreturn [{\n  json: {\n    trackUris: trackUris,\n    trackCount: trackUris.length,\n    notFoundCount: notFound.length,\n    notFoundTracks: notFound.slice(0, 10),\n    spotify_playlist_id: config.spotify_playlist_id,\n    config: config\n  }\n}];"
-      },
-      "id": "collect-uris",
-      "name": "Collect Spotify URIs",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1100, 0],
-      "notes": "Aggregates all found Spotify track URIs"
-    },
-    {
-      "parameters": {
-        "resource": "playlist",
-        "operation": "get",
-        "playlistId": "={{ $json.spotify_playlist_id }}"
-      },
-      "id": "get-playlist",
-      "name": "Get Playlist",
-      "type": "n8n-nodes-base.spotify",
-      "typeVersion": 1,
-      "position": [1320, 0],
-      "credentials": {
-        "spotifyOAuth2Api": {
-          "id": "SPOTIFY_CREDENTIAL_ID",
-          "name": "Spotify OAuth2"
-        }
-      },
-      "notes": "Gets the playlist including its tracks (works around Get Tracks 403 issue)"
-    },
-    {
-      "parameters": {
-        "jsCode": "// Get the collected URIs data from earlier\nconst uriData = $('Collect Spotify URIs').item.json;\n\n// Get playlist data (tracks are nested in tracks.items)\nconst playlistData = $input.first().json;\nconst trackItems = playlistData.tracks?.items || [];\n\n// Extract URIs of tracks currently in playlist\nconst existingUris = trackItems\n  .map(item => item.track?.uri)\n  .filter(uri => uri);\n\nreturn [{\n  json: {\n    existingUris: existingUris,\n    existingCount: existingUris.length,\n    newTrackUris: uriData.trackUris,\n    newTrackCount: uriData.trackCount,\n    notFoundCount: uriData.notFoundCount,\n    notFoundTracks: uriData.notFoundTracks,\n    spotify_playlist_id: uriData.spotify_playlist_id,\n    playlistName: playlistData.name,\n    config: uriData.config\n  }\n}];"
-      },
-      "id": "prepare-update",
-      "name": "Prepare Playlist Update",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1540, 0],
-      "notes": "Extracts existing track URIs from playlist response"
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict"
-          },
-          "conditions": [
+        "assignments": {
+          "assignments": [
             {
-              "id": "check-existing",
-              "leftValue": "={{ $json.existingCount }}",
-              "rightValue": 0,
-              "operator": {
-                "type": "number",
-                "operation": "gt"
-              }
+              "id": "lastfm_username",
+              "name": "lastfm_username",
+              "value": "YOUR_LASTFM_USERNAME",
+              "type": "string"
+            },
+            {
+              "id": "spotify_playlist_id",
+              "name": "spotify_playlist_id",
+              "value": "YOUR_SPOTIFY_PLAYLIST_ID",
+              "type": "string"
+            },
+            {
+              "id": "track_limit",
+              "name": "track_limit",
+              "value": 20,
+              "type": "number"
+            },
+            {
+              "id": "time_period",
+              "name": "time_period",
+              "value": "7day",
+              "type": "string"
             }
-          ],
-          "combinator": "and"
+          ]
         },
         "options": {}
       },
-      "id": "check-if-tracks-exist",
-      "name": "Has Existing Tracks?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "position": [1760, 0],
-      "notes": "Only remove tracks if playlist isn't empty"
+      "id": "bbccdc2f-04b7-4f1d-8328-f3fcd340f9e7",
+      "name": "⚙️ Configuration",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -5872,
+        688
+      ],
+      "notes": "EDIT YOUR SETTINGS HERE!\n\n• lastfm_username: Your Last.FM username\n• spotify_playlist_id: Target playlist ID (just the ID, not the full URI)\n• track_limit: Number of tracks (1-100)\n• time_period: 7day | 1month | 3month | 6month | 12month | overall"
     },
     {
       "parameters": {
-        "jsCode": "const data = $('Prepare Playlist Update').item.json;\n\nconst itemsToRemove = data.existingUris.map(uri => ({\n  json: {\n    trackUri: uri,\n    spotify_playlist_id: data.spotify_playlist_id,\n    newTrackUris: data.newTrackUris,\n    newTrackCount: data.newTrackCount,\n    notFoundCount: data.notFoundCount,\n    notFoundTracks: data.notFoundTracks,\n    playlistName: data.playlistName,\n    config: data.config\n  }\n}));\n\nreturn itemsToRemove;"
-      },
-      "id": "split-for-removal",
-      "name": "Split Tracks for Removal",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1980, -120],
-      "notes": "Creates one item per track for removal"
-    },
-    {
-      "parameters": {
-        "resource": "playlist",
-        "operation": "delete",
-        "playlistId": "={{ $json.spotify_playlist_id }}",
-        "trackId": "={{ $json.trackUri }}"
-      },
-      "id": "remove-tracks",
-      "name": "Remove Existing Tracks",
-      "type": "n8n-nodes-base.spotify",
-      "typeVersion": 1,
-      "position": [2200, -120],
-      "credentials": {
-        "spotifyOAuth2Api": {
-          "id": "SPOTIFY_CREDENTIAL_ID",
-          "name": "Spotify OAuth2"
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 24
+            }
+          ]
         }
       },
-      "notes": "Removes each existing track from playlist"
-    },
-    {
-      "parameters": {
-        "jsCode": "const firstItem = $input.first().json;\n\nreturn [{\n  json: {\n    newTrackUris: firstItem.newTrackUris || $('Prepare Playlist Update').item.json.newTrackUris,\n    newTrackCount: firstItem.newTrackCount || $('Prepare Playlist Update').item.json.newTrackCount,\n    notFoundCount: firstItem.notFoundCount || $('Prepare Playlist Update').item.json.notFoundCount,\n    notFoundTracks: firstItem.notFoundTracks || $('Prepare Playlist Update').item.json.notFoundTracks,\n    spotify_playlist_id: firstItem.spotify_playlist_id || $('Prepare Playlist Update').item.json.spotify_playlist_id,\n    playlistName: firstItem.playlistName || $('Prepare Playlist Update').item.json.playlistName,\n    config: firstItem.config || $('Prepare Playlist Update').item.json.config,\n    tracksRemoved: $input.all().length\n  }\n}];"
-      },
-      "id": "after-removal",
-      "name": "After Removal",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [2420, -120],
-      "notes": "Consolidates back to single item"
-    },
-    {
-      "parameters": {
-        "jsCode": "const data = $('Prepare Playlist Update').item.json;\n\nreturn [{\n  json: {\n    newTrackUris: data.newTrackUris,\n    newTrackCount: data.newTrackCount,\n    notFoundCount: data.notFoundCount,\n    notFoundTracks: data.notFoundTracks,\n    spotify_playlist_id: data.spotify_playlist_id,\n    playlistName: data.playlistName,\n    config: data.config,\n    tracksRemoved: 0\n  }\n}];"
-      },
-      "id": "skip-removal",
-      "name": "Skip Removal",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1980, 120],
-      "notes": "Passes data through when playlist is empty"
-    },
-    {
-      "parameters": {
-        "mode": "combine",
-        "mergeByFields": {
-          "values": []
-        },
-        "options": {}
-      },
-      "id": "merge-paths",
-      "name": "Merge Paths",
-      "type": "n8n-nodes-base.merge",
-      "typeVersion": 3,
-      "position": [2640, 0],
-      "notes": "Merges the two paths back together"
-    },
-    {
-      "parameters": {
-        "jsCode": "const data = $input.first().json;\n\nconst itemsToAdd = data.newTrackUris.map(uri => ({\n  json: {\n    trackUri: uri,\n    spotify_playlist_id: data.spotify_playlist_id,\n    playlistName: data.playlistName,\n    config: data.config,\n    totalTracks: data.newTrackCount,\n    notFoundCount: data.notFoundCount,\n    notFoundTracks: data.notFoundTracks,\n    tracksRemoved: data.tracksRemoved\n  }\n}));\n\nreturn itemsToAdd;"
-      },
-      "id": "split-for-adding",
-      "name": "Split Tracks for Adding",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [2860, 0],
-      "notes": "Creates one item per track to add"
-    },
-    {
-      "parameters": {
-        "resource": "playlist",
-        "operation": "add",
-        "playlistId": "={{ $json.spotify_playlist_id }}",
-        "trackId": "={{ $json.trackUri }}"
-      },
-      "id": "add-tracks",
-      "name": "Add New Tracks",
-      "type": "n8n-nodes-base.spotify",
-      "typeVersion": 1,
-      "position": [3080, 0],
-      "credentials": {
-        "spotifyOAuth2Api": {
-          "id": "SPOTIFY_CREDENTIAL_ID",
-          "name": "Spotify OAuth2"
-        }
-      },
-      "notes": "Adds each new track to playlist"
-    },
-    {
-      "parameters": {
-        "jsCode": "const items = $input.all();\nconst firstItem = items[0].json;\nconst config = firstItem.config;\nconst tracksAdded = items.length;\nconst tracksRemoved = firstItem.tracksRemoved || 0;\n\nconst periodLabels = {\n  '7day': 'past 7 days',\n  '1month': 'past month',\n  '3month': 'past 3 months',\n  '6month': 'past 6 months',\n  '12month': 'past year',\n  'overall': 'all time'\n};\n\nconst periodLabel = periodLabels[config.time_period] || config.time_period;\n\nreturn [{\n  json: {\n    success: true,\n    message: `✅ Updated \"${firstItem.playlistName}\" with ${tracksAdded} tracks from your Last.FM ${periodLabel} top tracks`,\n    playlist: firstItem.playlistName,\n    tracksAdded: tracksAdded,\n    tracksRemoved: tracksRemoved,\n    tracksNotFound: firstItem.notFoundCount || 0,\n    timePeriod: periodLabel,\n    sampleNotFound: firstItem.notFoundTracks || [],\n    updatedAt: new Date().toISOString()\n  }\n}];"
-      },
-      "id": "summary",
-      "name": "Generate Summary",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [3300, 0],
-      "notes": "Creates a summary of the sync operation"
+      "id": "5c629529-9ba2-40a4-a6c1-5299a54927c1",
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -6096,
+        688
+      ],
+      "notes": "Runs every 24 hours to update the playlist. Adjust interval as needed."
     }
   ],
+  "pinData": {},
   "connections": {
-    "Daily Trigger": {
+    "Add New Tracks": {
       "main": [
         [
           {
-            "node": "⚙️ Configuration",
+            "node": "Generate Summary",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "⚙️ Configuration": {
+    "Split Tracks for Adding": {
       "main": [
         [
           {
-            "node": "Get Last.FM Top Tracks",
+            "node": "Add New Tracks",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Get Last.FM Top Tracks": {
+    "Merge Paths": {
       "main": [
         [
           {
-            "node": "Process Track Data",
+            "node": "Split Tracks for Adding",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Process Track Data": {
+    "Skip Removal": {
       "main": [
         [
           {
-            "node": "Search Track on Spotify",
+            "node": "Merge Paths",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "After Removal": {
+      "main": [
+        [
+          {
+            "node": "Merge Paths",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Search Track on Spotify": {
+    "Remove Existing Tracks": {
       "main": [
         [
           {
-            "node": "Collect Spotify URIs",
+            "node": "After Removal",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Collect Spotify URIs": {
+    "Split Tracks for Removal": {
       "main": [
         [
           {
-            "node": "Get Playlist",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Get Playlist": {
-      "main": [
-        [
-          {
-            "node": "Prepare Playlist Update",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Prepare Playlist Update": {
-      "main": [
-        [
-          {
-            "node": "Has Existing Tracks?",
+            "node": "Remove Existing Tracks",
             "type": "main",
             "index": 0
           }
@@ -426,77 +467,88 @@
         ]
       ]
     },
-    "Split Tracks for Removal": {
+    "Prepare Playlist Update": {
       "main": [
         [
           {
-            "node": "Remove Existing Tracks",
+            "node": "Has Existing Tracks?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Remove Existing Tracks": {
+    "Get Playlist": {
       "main": [
         [
           {
-            "node": "After Removal",
+            "node": "Prepare Playlist Update",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "After Removal": {
+    "Collect Spotify URIs": {
       "main": [
         [
           {
-            "node": "Merge Paths",
+            "node": "Get Playlist",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Skip Removal": {
+    "Search Track on Spotify": {
       "main": [
         [
           {
-            "node": "Merge Paths",
-            "type": "main",
-            "index": 1
-          }
-        ]
-      ]
-    },
-    "Merge Paths": {
-      "main": [
-        [
-          {
-            "node": "Split Tracks for Adding",
+            "node": "Collect Spotify URIs",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Split Tracks for Adding": {
+    "Process Track Data": {
       "main": [
         [
           {
-            "node": "Add New Tracks",
+            "node": "Search Track on Spotify",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Add New Tracks": {
+    "Get Last.FM Top Tracks": {
       "main": [
         [
           {
-            "node": "Generate Summary",
+            "node": "Process Track Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚙️ Configuration": {
+      "main": [
+        [
+          {
+            "node": "Get Last.FM Top Tracks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "⚙️ Configuration",
             "type": "main",
             "index": 0
           }
@@ -504,13 +556,17 @@
       ]
     }
   },
+  "active": false,
   "settings": {
-    "executionOrder": "v1"
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
   },
-  "staticData": null,
-  "tags": [],
-  "triggerCount": 1,
+  "versionId": "d6850891-3de3-4e09-88dc-94e9d37afd60",
   "meta": {
-    "instanceId": "lastfm-spotify-sync"
-  }
+    "templateCredsSetupCompleted": true,
+    "instanceId": "5c543da84cdb1d37d3d6f039d4baa4c1c1f4a17014855295f19f684886670564"
+  },
+  "id": "vVLtZniAQA07F6vR",
+  "tags": []
 }
