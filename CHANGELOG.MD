@@ -2,7 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.1.6] - 2026-02-23
+## [1.0.0] - 2026-02-27
+
+### Added
+- **📖 Quick Start Guide**: Integrated a detailed setup guide directly into the workflow using a sticky note for easier configuration.
+- **Rate Limit Protection**: Added `Wait` nodes before both playlist retrieval and track addition to ensure reliable performance during larger sync operations.
+- **Improved Track Cleaning**: Enhanced logic to automatically strip common track name suffixes like "(Remastered)" that often cause Spotify search misses.
+- **Bulk Operations**: Migrated track addition and removal to bulk API calls via `HTTP Request` nodes, significantly improving performance and reducing the number of API requests.
+
+### Fixed
+- **Sync Reliability**: Re-implemented the search and collection logic to be more robust, handling missing tracks gracefully and reporting them in the final summary.
+- **Data Flow**: Optimized the workflow structure to ensure clean data transitions between Last.FM retrieval and Spotify playlist updates.
+
+### Changed
+- **Spotify API Strategy**: Switched from native Spotify nodes to direct `HTTP Request` nodes for add/remove operations to leverage bulk API endpoints and bypass n8n-specific node limitations.
+- **Configuration**: Updated the `⚙️ Configuration` node with user-friendly notes and an `api_wait_seconds` setting to customize rate-limiting delays.
+- **Default Settings**: Adjusted default `track_limit` to 25 for a better initial experience while remaining configurable up to 100.
+
+---
+
+## [0.1.6] - 2026-02-23
 
 ### Fixed
 - **Authentication**: Resolved persistent 403 Forbidden errors by re-authenticating Spotify credentials and correctly managing authorized users in the Spotify Developer Dashboard.
@@ -14,17 +33,17 @@ All notable changes to this project will be documented in this file.
 ### Known Issues
 - **Rate Limiting**: Identified Spotify API rate-limiting as a potential bottleneck during large sync operations.
 
-## [1.1.5] - 2026-02-23
+## [0.1.5] - 2026-02-23
 
 ### Changed
 - **Spotify API Strategy**: Migrated all Spotify nodes to direct `HTTP Request` nodes to use Generic OAuth2 credentials. This was a troubleshooting step to bypass 403 Forbidden errors.
 
-## [1.1.4] - 2026-02-23
+## [0.1.4] - 2026-02-23
 
 ### Changed
 - **Spotify API Strategy**: Replaced the native `Add New Tracks` Spotify node with a direct `HTTP Request` node. This bypasses potential 403 Forbidden errors caused by n8n's built-in node scope handling and ensures more reliable playlist updates via the Spotify Web API.
 
-## [1.1.3] - 2026-02-23
+## [0.1.3] - 2026-02-23
 
 ### Fixed
 - **Spotify Node Parameters**: Re-applied fixes for `Add New Tracks` and `Remove Existing Tracks` nodes to use correct parameter names (`playlistId`, `trackUris`) and operations (`add`, `Remove an item`) which were causing 400/403 errors and regressions.
@@ -33,13 +52,13 @@ All notable changes to this project will be documented in this file.
 ### Changed
 - **Spotify API Strategy**: Investigated 403 Forbidden errors on `Add New Tracks` node. Documented an `HTTP Request` node alternative for direct API calls to help bypass potential n8n scope limitations.
 
-## [1.1.2] - 2026-02-23
+## [0.1.2] - 2026-02-23
 
 ### Fixed
 - **Collect Spotify URIs**: Rewrote the URI collection logic to correctly handle both flat and nested search result structures from the n8n Spotify node. Added validation to ensure only track URIs are collected (ignoring album/artist results) and normalized track IDs to URIs.
 - **Spotify Search Node**: Adjusted search limit to 1 to simplify response processing and ensure a 1-to-1 mapping between searches and results, improving the reliability of the URI collection loop.
 
-## [1.1.1] - 2026-02-23
+## [0.1.1] - 2026-02-23
 
 ### Fixed
 - **Spotify Search Logic**: 
@@ -48,7 +67,7 @@ All notable changes to this project will be documented in this file.
   - Added `alwaysOutputData: true` to the search node to ensure subsequent nodes remain in sync even when no tracks are found.
   - Simplified the `limit` parameter structure to align with user feedback.
 
-## [1.1.0] - 2026-02-23
+## [0.1.0] - 2026-02-23
 
 ### Fixed
 - **Spotify Search**: Increased search limit to 10 in `additionalFields` to improve track matching reliability.
@@ -60,7 +79,7 @@ All notable changes to this project will be documented in this file.
 ### Added
 - Created `CHANGELOG.MD` to track project evolution.
 
-## [1.0.1] - 2026-02-23
+## [0.0.1] - 2026-02-23
 
 ### Fixed
 - **Merge Paths**: Changed mode to `append` and disabled `waitForAllInputs` to prevent the workflow from stalling when one branch of the `IF` node is skipped.
@@ -69,7 +88,7 @@ All notable changes to this project will be documented in this file.
 ### Changed
 - **Playlist Retrieval**: Implemented "Get Playlist" node as a workaround for 403 Forbidden errors encountered when using the "Get Tracks" operation due to n8n OAuth scope limitations.
 
-## [1.0.0] - 2026-02-22
+## [0.0.0] - 2026-02-22
 
 ### Added
 - Initial release of the Last.FM to Spotify Sync n8n workflow.

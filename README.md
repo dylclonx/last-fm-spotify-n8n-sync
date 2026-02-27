@@ -13,23 +13,37 @@ This n8n workflow automatically syncs your most-listened tracks from Last.FM to 
       ┌────────────────────────────────────────────────────┘
       ▼
 ┌───────────────────┐    ┌──────────────────────┐    ┌───────────────────┐
-│ Search Track on   │───▶│ Collect Spotify URIs │───▶│ Get Playlist      │
-│ Spotify           │    │                      │    │ (includes tracks) │
+│ Process Track     │───▶│ Search Track on      │───▶│ Collect Spotify   │
+│ Data (Clean names)│    │ Spotify              │    │ URIs              │
+└───────────────────┘    └──────────────────────┘    └─────────┬─────────┘
+                                                               │
+      ┌────────────────────────────────────────────────────────┘
+      ▼
+┌───────────────────┐    ┌──────────────────────┐    ┌───────────────────┐
+│ Wait Node         │───▶│ Get Playlist         │───▶│ Prepare Playlist  │
+│ (Rate limiting)   │    │ (includes tracks)    │    │ Update            │
 └───────────────────┘    └──────────────────────┘    └─────────┬─────────┘
                                                                │
       ┌────────────────────────────────────────────────────────┘
       ▼
 ┌───────────────────┐         ┌───────────────────┐
 │ Has Existing      │───YES──▶│ Remove Existing   │───┐
-│ Tracks?           │         │ Tracks (Spotify)  │   │
+│ Tracks?           │         │ Tracks (Bulk API) │   │
 └─────────┬─────────┘         └───────────────────┘   │
           │ NO                                        │
           └──────────────────┬────────────────────────┘
                              ▼
-                  ┌───────────────────┐    ┌───────────────────┐
-                  │ Add New Tracks    │───▶│ Generate Summary  │
-                  │ (Spotify)         │    │                   │
-                  └───────────────────┘    └───────────────────┘
+┌───────────────────┐    ┌──────────────────────┐    ┌───────────────────┐
+│ Merge Paths       │───▶│ Encode URIs for      │───▶│ Add New Tracks    │
+│                   │    │ Spotify              │    │ (Bulk API)        │
+└───────────────────┘    └──────────────────────┘    └─────────┬─────────┘
+                                                               │
+                                         ┌─────────────────────┘
+                                         ▼
+                               ┌───────────────────┐
+                               │ Generate Summary  │
+                               │                   │
+                               └───────────────────┘
 ```
 
 ---
@@ -92,7 +106,7 @@ The Last.FM API key is stored securely using n8n's credential system.
 
 ### Step 1: Import the Workflow
 1. In n8n, go to **Workflows** → **Import from File**
-2. Select the `lastfm-spotify-workflow.json` file
+2. Select the `LastFM to Spotify Sync n8n Workflow.json` file
 
 ### Step 2: Connect Credentials
 
@@ -111,8 +125,9 @@ Click on the **"⚙️ Configuration"** node and update:
 |-----------|-------------|---------|
 | `lastfm_username` | Your Last.FM username | `johndoe` |
 | `spotify_playlist_id` | Playlist ID from Spotify URL | `37i9dQZF1DXcBWIGoYBM5M` |
-| `track_limit` | Number of tracks to sync (1-100) | `50` |
-| `time_period` | Time range for top tracks | `7day` |
+| `track_limit` | Number of tracks to sync (1-100) | `25` |
+| `time_period` | Time range for top tracks | `1month` |
+| `api_wait_seconds` | Delay between API calls (seconds) | `31` |
 
 #### Time Period Options:
 | Value | Description |
@@ -134,17 +149,22 @@ Toggle the workflow to **Active** and you're done!
 
 ## How It Works
 
-1. **Schedule Trigger** → Executes on your chosen schedule
-2. **⚙️ Configuration** → Loads your settings (username, playlist ID, preferences)
-3. **Get Last.FM Top Tracks** → Fetches your top tracks using the API key from credentials
-4. **Process Track Data** → Formats tracks for Spotify search
-5. **Search Track on Spotify** → Finds each track on Spotify
-6. **Collect Spotify URIs** → Gathers all found track URIs
-7. **Get Playlist** → Retrieves playlist info including existing tracks
-8. **Has Existing Tracks?** → Checks if playlist needs to be cleared first
-9. **Remove Existing Tracks** → Uses native Spotify node to remove old tracks (if any)
-10. **Add New Tracks** → Uses native Spotify node to add your top tracks
-11. **Generate Summary** → Reports what was synced
+1. **Schedule Trigger** → Executes every 24 hours (configurable)
+2. **⚙️ Configuration** → Loads your settings and preferences
+3. **Get Last.FM Top Tracks** → Fetches your top tracks using the API key
+4. **Process Track Data** → Formats tracks for Spotify search and cleans track names (strips "Remastered", etc.)
+5. **Search Track on Spotify** → Finds each track on Spotify using optimal search queries
+6. **Collect Spotify URIs** → Gathers all found track URIs and tracks misses
+7. **Wait before Get Playlist** → Optional delay to prevent rate limiting
+8. **Get Playlist** → Retrieves playlist info to find existing tracks
+9. **Prepare Playlist Update** → Extracts existing URIs for removal
+10. **Has Existing Tracks?** → Checks if the playlist needs to be cleared
+11. **Remove Existing Tracks** → Uses bulk API call to clear the playlist in one go
+12. **Merge Paths** → Consolidates workflow after removal or skip
+13. **Encode URIs for Spotify** → Prepares track URIs for the bulk add request
+14. **Wait before Add** → Optional delay for API stability
+15. **Add New Tracks** → Uses bulk API call to add all top tracks simultaneously
+16. **Generate Summary** → Reports exactly what was synced and what was missing
 
 > **Note:** Uses "Get Playlist" instead of "Get Tracks" to work around an n8n Spotify node scope limitation.
 
@@ -196,9 +216,10 @@ Toggle the workflow to **Active** and you're done!
 ## Notes
 
 - The workflow **replaces ALL tracks** in the playlist each time (doesn't append)
-- Uses **native Spotify nodes** for add/remove operations (better OAuth scope handling)
+- Uses **bulk API requests** for add/remove operations (faster and more reliable)
+- Includes **Wait nodes** to handle Spotify API rate limiting gracefully
 - Uses "Get Playlist" instead of "Get Tracks" to work around n8n scope limitations
-- Maximum 100 tracks per sync (configurable via track_limit)
+- Maximum 100 tracks per sync (configurable via `track_limit`)
 - Tracks are synced in order of play count (most listened first)
-- The workflow handles empty playlists gracefully (skips removal step)
-- **Limitation:** If your target playlist has more than 100 existing tracks, only the first 100 will be removed (Spotify API pagination)
+- Automatically **cleans track names** to improve Spotify search results
+- Includes a **Quick Start Guide** sticky note directly inside the workflow
