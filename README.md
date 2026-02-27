@@ -1,4 +1,4 @@
-# Last.FM Weekly Top Tracks to Spotify Playlist Sync
+# Last.FM Top Tracks to Spotify Playlist Sync
 
 This n8n workflow automatically syncs your most-listened tracks from Last.FM to a Spotify playlist every 24 hours.
 
